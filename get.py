@@ -9,11 +9,12 @@ import mechanize
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2049.0 Safari/537.36'
 
 parser = OptionParser()
+parser.add_option('-o','--out', default='downloaded', help='output directory')
 parser.add_option('-w','--wait', default='10,27', help='range of times to sleep bt requests (sec); eg "10,27"')
 parser.add_option('-u','--ua', default=DEFAULT_USER_AGENT, help='user agent string')
 (options, args) = parser.parse_args()
 
-sleep_range = map(lambda t: int(t), options.wait.split(','))
+sleep_range = map(int, options.wait.split(','))
 
 
 def select_all_control_options(control_name):
@@ -33,25 +34,10 @@ br.set_handle_robots(False)   # ignore robots
 br.set_handle_refresh(False)  # can sometimes hang without this
 br.addheaders = [('User-agent', options.ua)]
 
-
+# only does the "one year of data" option for now
 url = 'http://www.ucrdatatool.gov/Search/Crime/Local/OneYearofData.cfm'
-base_output_dir = 'downloaded'
+base_output_dir = options.out[:-1] if options.out.endswith('/') else options.out
 
-
-def stateid_control_data():
-    response = br.open(url)
-    select_writeable_form('CFForm_1')
-    control = br.form.find_control('StateId')
-    control.value = ['1']
-    # print control.items[]
-    for item in control.items:
-        if item.name == control.value[0]:
-            # print " name=%s values=%s" % (item.name, [label.text for label in item.get_labels()][0])
-            # print [label.text for label in item.get_labels()][0]
-            print item.get_labels()[0].text
-            break
-
-# stateid_control_data()
 
 def get_all():
 
@@ -59,10 +45,10 @@ def get_all():
     for state_id in xrange(start_state, end_state):
 
         response = br.open(url)
-        #print response.read()      # the text of the page
 
         select_writeable_form('CFForm_1')
 
+        # get the state name
         state_id_control = br.form.find_control('StateId')
         state_id_control.value = [str(state_id)]
         for item in state_id_control.items:
@@ -77,6 +63,8 @@ def get_all():
             os.makedirs(state_output_dir)
             print 'made a new output directory: %s' % state_output_dir
 
+        # generate a list of year-data to scrape, ignoring data we already have
+        # (a contingency for when scraping is interrupted then restarted)
         start_year, end_year = 1985, 2012+1
         already_done = [int(yr.replace('.html','')) for yr in os.listdir(state_output_dir) if yr.endswith('.html')]
         years_to_do = list(set(range(start_year, end_year)) - set(already_done))
@@ -116,6 +104,7 @@ def get_all():
                 outfile.write(response.read())
                 print 'wrote file %s' % filename
 
+            # rate-limit like a human browsing through records
             sleep_time = randrange(sleep_range[0], sleep_range[1])
             print 'sleeping for %d seconds' % sleep_time
             sleep(sleep_time)
